@@ -30,7 +30,7 @@ pipeline {
                         sonar-scanner \
                           -Dsonar.projectKey=blog-app \
                           -Dsonar.sources=. \
-                          -Dsonar.host.url=http://sonarqube:9000 \
+                          -Dsonar.host.url=http://localhost:9000 \
                           -Dsonar.login=${SONARQUBE_TOKEN} || true
                         """
                     }
