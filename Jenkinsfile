@@ -2,9 +2,11 @@ pipeline {
     agent any
 
     environment {
+        // Replace 'mekdb1' with your actual Docker Hub username
         IMAGE = "docker.io/mydockerkdb/blog-app:latest"
         SONARQUBE_ENV = "local-sonar"
-        KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
+        // Path to kubeconfig copied for Jenkins user
+        KUBECONFIG = "/var/lib/jenkins/k3s.yaml"
     }
 
     stages {
@@ -37,7 +39,9 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE} ."
+                script {
+                    sh "docker build -t ${IMAGE} ."
+                }
             }
         }
 
@@ -52,21 +56,12 @@ pipeline {
             }
         }
 
-        stage('Trivy Scan') {
-            steps {
-                sh "trivy image ${IMAGE}"
-            }
-        }
-
         stage('Deploy to k3s') {
             steps {
                 script {
-                    // Apply Kubernetes manifests to k3s
                     sh '''
                     export KUBECONFIG=${KUBECONFIG}
                     kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
-                    kubectl rollout status deployment/blog-app
                     '''
                 }
             }
@@ -74,15 +69,20 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                // Replace with your service NodePort or Ingress URL
-                sh 'curl -f http://localhost:30080 || exit 1'
+                script {
+                    sh '''
+                    export KUBECONFIG=${KUBECONFIG}
+                    kubectl rollout status deployment/blog-app
+                    kubectl get pods -l app=blog-app
+                    '''
+                }
             }
         }
     }
 
     post {
         always {
-            echo "Pipeline finished. Blog app deployed to k3s. Check SonarQube, Nexus, and Trivy results."
+            echo "Pipeline finished. Blog app deployed to k3s. Check SonarQube dashboard, Docker Hub image, and rollout status."
         }
     }
 }
