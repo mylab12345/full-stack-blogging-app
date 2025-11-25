@@ -2,11 +2,9 @@ pipeline {
     agent any
 
     environment {
-        // Replace 'mekdb1' with your actual Docker Hub username
         IMAGE = "docker.io/mydockerkdb/blog-app:latest"
         SONARQUBE_ENV = "local-sonar"
-        // Path to kubeconfig copied for Jenkins user
-        KUBECONFIG = "/var/lib/jenkins/k3s.yaml"
+        KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
     }
 
     stages {
@@ -39,9 +37,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh "docker build -t ${IMAGE} ."
-                }
+                sh "docker build -t ${IMAGE} ."
             }
         }
 
@@ -61,7 +57,9 @@ pipeline {
                 script {
                     sh '''
                     export KUBECONFIG=${KUBECONFIG}
-                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f deployment.yaml
+                    kubectl apply -f service.yml
+                    kubectl rollout status deployment/blog-app
                     '''
                 }
             }
@@ -69,20 +67,15 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                script {
-                    sh '''
-                    export KUBECONFIG=${KUBECONFIG}
-                    kubectl rollout status deployment/blog-app
-                    kubectl get pods -l app=blog-app
-                    '''
-                }
+                // Adjust port if your service.yaml uses a different NodePort
+                sh 'curl -f http://localhost:30080 || exit 1'
             }
         }
     }
 
     post {
         always {
-            echo "Pipeline finished. Blog app deployed to k3s. Check SonarQube dashboard, Docker Hub image, and rollout status."
+            echo "Pipeline finished. Blog app deployed to k3s. Check SonarQube and Nexus dashboards."
         }
     }
 }
