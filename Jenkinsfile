@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         // Replace 'mekdb1' with your actual Docker Hub username
-        IMAGE = "docker.io/mekdb1/blog-app:latest"
+        IMAGE = "docker.io/mydockerkdb/blog-app:latest"
         SONARQUBE_ENV = "local-sonar"
     }
 
