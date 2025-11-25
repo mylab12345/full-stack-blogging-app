@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE = "localhost:5000/blog-app:latest"
+        IMAGE = "docker.io/<your-dockerhub-username>/blog-app:latest"
         SONARQUBE_ENV = "local-sonar"
     }
 
@@ -10,6 +10,27 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONARQUBE_TOKEN')]) {
+                        sh '''
+                        mvn sonar:sonar \
+                          -Dsonar.projectKey=blog-app \
+                          -Dsonar.host.url=http://localhost:9000 \
+                          -Dsonar.login=$SONARQUBE_TOKEN
+                        '''
+                    }
+                }
             }
         }
 
@@ -21,29 +42,11 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONARQUBE_TOKEN')]) {
-                        // Use single quotes to avoid Groovy interpolation warnings
-                        sh '''
-                        sonar-scanner \
-                          -Dsonar.projectKey=blog-app \
-                          -Dsonar.sources=. \
-                          -Dsonar.java.binaries=target/classes \
-                          -Dsonar.host.url=http://localhost:9000 \
-                          -Dsonar.login=$SONARQUBE_TOKEN || true
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Push to Registry') {
+        stage('Push to Docker Hub') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
-                    docker login localhost:5000 -u $DOCKER_USER -p $DOCKER_PASS
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     docker push ${IMAGE}
                     '''
                 }
@@ -53,7 +56,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished. Check SonarQube dashboard and registry image."
+            echo "Pipeline finished. Check SonarQube dashboard and Docker Hub image."
         }
     }
 }
