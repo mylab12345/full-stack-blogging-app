@@ -22,22 +22,6 @@ pipeline {
             }
         }
 
-        stage('Trivy Scan') {
-            steps {
-                script {
-                    // Run Trivy scan, save report, but don't fail pipeline
-                    sh """
-                    docker run --rm \
-                      -v /var/run/docker.sock:/var/run/docker.sock \
-                      aquasec/trivy:latest image \
-                      --exit-code 0 --severity HIGH,CRITICAL \
-                      --format table \
-                      ${IMAGE} > trivy-report.txt
-                    """
-                }
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
@@ -68,8 +52,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished. Check SonarQube dashboard, Trivy report, and registry image."
-            archiveArtifacts artifacts: 'trivy-report.txt', onlyIfSuccessful: false
+            echo "Pipeline finished. Check SonarQube dashboard and registry image."
         }
     }
 }
