@@ -2,7 +2,8 @@ pipeline {
     agent any
 
     environment {
-        IMAGE = "docker.io/<your-dockerhub-username>/blog-app:latest"
+        // Replace 'mekdb1' with your actual Docker Hub username
+        IMAGE = "docker.io/mekdb1/blog-app:latest"
         SONARQUBE_ENV = "local-sonar"
     }
 
@@ -15,12 +16,14 @@ pipeline {
 
         stage('Build with Maven') {
             steps {
+                // Compile and package the Java project
                 sh 'mvn clean package'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
+                // Run SonarQube analysis using Maven plugin
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
                     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONARQUBE_TOKEN')]) {
                         sh '''
@@ -37,6 +40,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+                    // Build Docker image tagged with Docker Hub path
                     sh "docker build -t ${IMAGE} ."
                 }
             }
@@ -44,6 +48,7 @@ pipeline {
 
         stage('Push to Docker Hub') {
             steps {
+                // Use Jenkins credentials to log in and push
                 withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
