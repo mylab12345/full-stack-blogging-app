@@ -15,44 +15,53 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE .'
+                script {
+                    // Build image using Docker CLI
+                    sh "docker build -t ${IMAGE} ."
+                }
             }
         }
 
         stage('Trivy Scan') {
             steps {
-                // Run Trivy in Docker, save report, but don't fail pipeline
-                sh '''
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  aquasec/trivy:latest image \
-                  --exit-code 0 --severity HIGH,CRITICAL \
-                  --format table \
-                  $IMAGE > trivy-report.txt
-                '''
+                script {
+                    // Run Trivy scan, save report, but don't fail pipeline
+                    sh """
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      aquasec/trivy:latest image \
+                      --exit-code 0 --severity HIGH,CRITICAL \
+                      --format table \
+                      ${IMAGE} > trivy-report.txt
+                    """
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh '''
-                    sonar-scanner \
-                      -Dsonar.projectKey=blog-app \
-                      -Dsonar.sources=. \
-                      -Dsonar.host.url=http://localhost:9000 \
-                      -Dsonar.login=$SONARQUBE_TOKEN || true
-                    '''
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONARQUBE_TOKEN')]) {
+                        sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=blog-app \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=http://sonarqube:9000 \
+                          -Dsonar.login=${SONARQUBE_TOKEN} || true
+                        """
+                    }
                 }
             }
         }
 
         stage('Push to Registry') {
             steps {
-                sh '''
-                docker login localhost:5000 -u admin -p admin123 || true
-                docker push $IMAGE || true
-                '''
+                withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                    docker login localhost:5000 -u ${DOCKER_USER} -p ${DOCKER_PASS}
+                    docker push ${IMAGE}
+                    """
+                }
             }
         }
     }
@@ -60,6 +69,7 @@ pipeline {
     post {
         always {
             echo "Pipeline finished. Check SonarQube dashboard, Trivy report, and registry image."
+            archiveArtifacts artifacts: 'trivy-report.txt', onlyIfSuccessful: false
         }
     }
 }
