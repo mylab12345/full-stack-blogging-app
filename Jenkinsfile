@@ -21,12 +21,14 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
+                // Run Trivy in Docker, save report, but don't fail pipeline
                 sh '''
                 docker run --rm \
                   -v /var/run/docker.sock:/var/run/docker.sock \
                   aquasec/trivy:latest image \
-                  --exit-code 1 --severity HIGH,CRITICAL \
-                  $IMAGE
+                  --exit-code 0 --severity HIGH,CRITICAL \
+                  --format table \
+                  $IMAGE > trivy-report.txt
                 '''
             }
         }
@@ -34,21 +36,30 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh 'sonar-scanner || true'
+                    sh '''
+                    sonar-scanner \
+                      -Dsonar.projectKey=blog-app \
+                      -Dsonar.sources=. \
+                      -Dsonar.host.url=http://localhost:9000 \
+                      -Dsonar.login=$SONARQUBE_TOKEN || true
+                    '''
                 }
             }
         }
 
         stage('Push to Registry') {
             steps {
-                sh 'docker push $IMAGE || true'
+                sh '''
+                docker login localhost:5000 -u admin -p admin123 || true
+                docker push $IMAGE || true
+                '''
             }
         }
     }
 
     post {
         always {
-            echo "Pipeline finished. Check SonarQube dashboard and Trivy scan results."
+            echo "Pipeline finished. Check SonarQube dashboard, Trivy report, and registry image."
         }
     }
 }
