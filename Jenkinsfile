@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        // Replace 'mekdb1' with your actual Docker Hub username
         IMAGE = "docker.io/mydockerkdb/blog-app:latest"
         SONARQUBE_ENV = "local-sonar"
+        KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
     }
 
     stages {
@@ -16,14 +16,12 @@ pipeline {
 
         stage('Build with Maven') {
             steps {
-                // Compile and package the Java project
                 sh 'mvn clean package'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                // Run SonarQube analysis using Maven plugin
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
                     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONARQUBE_TOKEN')]) {
                         sh '''
@@ -39,16 +37,12 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    // Build Docker image tagged with Docker Hub path
-                    sh "docker build -t ${IMAGE} ."
-                }
+                sh "docker build -t ${IMAGE} ."
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                // Use Jenkins credentials to log in and push
                 withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
@@ -57,11 +51,38 @@ pipeline {
                 }
             }
         }
+
+        stage('Trivy Scan') {
+            steps {
+                sh "trivy image ${IMAGE}"
+            }
+        }
+
+        stage('Deploy to k3s') {
+            steps {
+                script {
+                    // Apply Kubernetes manifests to k3s
+                    sh '''
+                    export KUBECONFIG=${KUBECONFIG}
+                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f k8s/service.yaml
+                    kubectl rollout status deployment/blog-app
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                // Replace with your service NodePort or Ingress URL
+                sh 'curl -f http://localhost:30080 || exit 1'
+            }
+        }
     }
 
     post {
         always {
-            echo "Pipeline finished. Check SonarQube dashboard and Docker Hub image."
+            echo "Pipeline finished. Blog app deployed to k3s. Check SonarQube, Nexus, and Trivy results."
         }
     }
 }
