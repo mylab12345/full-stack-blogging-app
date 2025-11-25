@@ -16,7 +16,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Build image using Docker CLI
                     sh "docker build -t ${IMAGE} ."
                 }
             }
@@ -26,13 +25,15 @@ pipeline {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
                     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONARQUBE_TOKEN')]) {
-                        sh """
+                        // Use single quotes to avoid Groovy interpolation warnings
+                        sh '''
                         sonar-scanner \
                           -Dsonar.projectKey=blog-app \
                           -Dsonar.sources=. \
+                          -Dsonar.java.binaries=target/classes \
                           -Dsonar.host.url=http://localhost:9000 \
-                          -Dsonar.login=${SONARQUBE_TOKEN} || true
-                        """
+                          -Dsonar.login=$SONARQUBE_TOKEN || true
+                        '''
                     }
                 }
             }
@@ -41,10 +42,10 @@ pipeline {
         stage('Push to Registry') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
-                    docker login localhost:5000 -u ${DOCKER_USER} -p ${DOCKER_PASS}
+                    sh '''
+                    docker login localhost:5000 -u $DOCKER_USER -p $DOCKER_PASS
                     docker push ${IMAGE}
-                    """
+                    '''
                 }
             }
         }
